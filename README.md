@@ -1,5 +1,6 @@
 # centos-script.sh
  這是一個全自動設定 Centos7 的全自動懶人腳本。
+ 在最新版的 CentOS-7-x86_64 1804 測試
 # 執行前準備工作
 * 下載 CentOS-7-x86_64-Minimal-1804.iso
 * 安裝 centOS 並設定網卡IP，讓伺服器可以上網
