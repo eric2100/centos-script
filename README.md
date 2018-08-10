@@ -17,3 +17,29 @@
 * 安裝 squid Proxy Server
 * 安裝 letSSL
 * 最後重開機後，完成。基本上跑完這個script 就是一台堪用的伺服器了。
+# 使用方法
+修改centos-script.sh 裡面的 User Variables相關設定
+
+``` bash
+ADD_USERNAME="qaz"         # 要自動新增的使用者(具有root權限)
+ADD_USERPASS="123456"      # 自動新增的使用者密碼
+HOSTNAME="localhost"       # 主機名稱
+DB_USER="root"             # 資料庫帳號
+DB_PASSWD="123456"         # 資料庫密碼
+SSH_PORT="22"              # SSH 服務的 PORT 位
+sEXTIF="ens33"             # 這個是可以連上 Public IP 的網路介面
+sINIF=""                   # 內部 LAN 的連接介面；若無則寫成 INIF=""
+sINNET="192.168.20.0/24"   # 若無內部網域介面，請填寫成 INNET=""，若有格式為 192.168.20.0/24
+EXTNET="49.225.176.30"     # 外部IP位址
+INSTALL_PHP="72"           # 5 or 7 or 71 or 72 ，不安裝的話 INSTALL_PHP=""
+INSTALL_APACHE="YES"       # 要裝apache 設定 YES
+INSTALL_NGINX="NO" 		   # 要裝 NGINX 設定 YES
+FREETDS_IP="192.168.100.3" # MSSQL 的ip位址
+# Custom Script 客製化想要新增的規則 
+# Add route table and EEP socker services.
+cat >> /etc/rc.local <<EOT
+/usr/local/virus/iptables/iptables.rule
+route add -net 192.168.0.0 netmask 255.255.0.0 gw 192.168.20.254
+socat TCP-LISTEN:4444,fork TCP:192.168.1.3:211 &
+EOT
+```
