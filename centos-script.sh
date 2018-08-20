@@ -489,7 +489,7 @@ sed -i '/\[mysqld\]/a\net_read_timeout=120' /etc/my.cnf.d/server.cnf
 sed -i '/\[mysqld\]/a\event_scheduler = ON' /etc/my.cnf.d/server.cnf
 
 log "${Blue}Install mydumper${Reset}"
-yum install -y https://copr-be.cloud.fedoraproject.org/results/bpereto/epel7/epel-7-x86_64/00156997-mydumper/mydumper-0.9.1-1.el7.centos.x86_64.rpm
+yum install -y https://github.com/maxbube/mydumper/releases/download/v0.9.5/mydumper-0.9.5-2.el7.x86_64.rpm
 
 systemctl restart mariadb.service
 systemctl enable mariadb.service
