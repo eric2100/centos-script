@@ -110,7 +110,7 @@ basesoftware (){
 # isntall base software and tools
 # ================================================================
 log "${Blue}isntall base software and tools${Reset}"
-yum install -y net-tools wget unzip vim-enhanced p7zip p7zip-plugins yum-cron screen telnet git axel gcc iptables-services yum-utils ntp ftp socat curl rkhunter golang traceroute 
+yum install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins yum-cron screen telnet git axel gcc iptables-services yum-utils ntp ftp socat curl rkhunter golang traceroute 
 
 curl -sL https://rpm.nodesource.com/setup_10.x | bash -
 curl -sL https://dl.yarnpkg.com/rpm/yarn.repo | tee /etc/yum.repos.d/yarn.repo
@@ -475,7 +475,7 @@ log "${Blue}Install MariaDB${Reset}"
 cat >> /etc/yum.repos.d/MariaDB.repo <<EOT
 [mariadb]
 name = MariaDB
-baseurl = http://yum.mariadb.org/10.3/centos73-amd64/
+baseurl = http://yum.mariadb.org/10.3/centos7-amd64/
 gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
 gpgcheck=1
 EOT
