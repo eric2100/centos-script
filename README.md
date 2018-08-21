@@ -10,6 +10,7 @@
 * 初始化系統:他會將環境設定成台灣時區，語言，並更新最新版的yum 倉儲。
 * 安裝基本常用的網管軟體，像是 p7zip ftp screen telnet等等的。
 * 將內建防火牆關閉，使用老牌 iptables 防火牆，設定檔案內容是 鳥哥 抄過來的，並稍微調整功能。
+* 安裝 docker
 * 安裝 MariaDB 
 * 安裝 apache
 * 安裝 NGINX (測試功能 還沒完成，懶得換nginx)
