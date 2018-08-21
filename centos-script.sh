@@ -110,7 +110,7 @@ basesoftware (){
 # isntall base software and tools
 # ================================================================
 log "${Blue}isntall base software and tools${Reset}"
-yum install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins yum-cron screen telnet git axel gcc iptables-services yum-utils ntp ftp socat curl rkhunter golang traceroute 
+yum install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins yum-cron screen telnet git axel gcc iptables-services yum-utils ntp ftp socat curl rkhunter golang traceroute  device-mapper-persistent-data lvm2
 
 curl -sL https://rpm.nodesource.com/setup_10.x | bash -
 curl -sL https://dl.yarnpkg.com/rpm/yarn.repo | tee /etc/yum.repos.d/yarn.repo
@@ -119,6 +119,13 @@ yum -y install yarn
 
 systemctl start crond
 systemctl start yum-cron
+
+log "${Blue}isntall docker${Reset}"
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+yum makecache fast
+yum install -y docker-ce
+systemctl start docker
+docker run hello-world
 
 sed -i 's/apply_updates = no/apply_updates = yes/g' /etc/yum/yum-cron.conf
 
