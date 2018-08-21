@@ -112,6 +112,7 @@ basesoftware (){
 log "${Blue}isntall base software and tools${Reset}"
 yum install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins yum-cron screen telnet git axel gcc iptables-services yum-utils ntp ftp socat curl rkhunter golang traceroute  device-mapper-persistent-data lvm2
 
+log "${Blue}isntall NPM and Yarn ${Reset}" 
 curl -sL https://rpm.nodesource.com/setup_10.x | bash -
 curl -sL https://dl.yarnpkg.com/rpm/yarn.repo | tee /etc/yum.repos.d/yarn.repo
 yum install --skip-broken -y nodejs gcc-c++ make yarn
