@@ -746,17 +746,17 @@ install_iptables
 #優化環境設定
 setsystem
 #安裝 MariaDB
-nstall_MariaDB
+install_MariaDB
 #安裝 apache
-nstall_apache
+install_apache
 #安裝 NGINX
 #install_nginx
 #安裝 php
 install_php
 #安裝vsftpd
-nstall_vsftpd
+install_vsftpd
 # 安裝proxy
-nstall_squid
+install_squid
 # 安裝 Let'SSL 免費憑證
 install_letSSL
 # 安裝完成後的說明
