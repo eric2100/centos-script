@@ -22,14 +22,14 @@ HOSTNAME="localhost"       # 主機名稱
 DB_USER="root"             # 資料庫帳號
 DB_PASSWD="123456"         # 資料庫密碼
 SSH_PORT="22"              # SSH 服務的 PORT 位
-sEXTIF="ens33"             # 這個是可以連上 Public IP 的網路介面
+sEXTIF="enp0s3"             # 這個是可以連上 Public IP 的網路介面
 sINIF=""                   # 內部 LAN 的連接介面；若無則寫成 INIF=""
 sINNET="192.168.20.0/24"   # 若無內部網域介面，請填寫成 INNET=""，若有格式為 192.168.20.0/24
-EXTNET="49.225.176.30"     # 外部IP位址
-INSTALL_PHP="72"           # 5 or 7 or 71 or 72 ，不安裝的話 INSTALL_PHP=""
+EXTNET="39.225.276.30"     # 外部IP位址
+INSTALL_PHP="72"           # 7 or 71 or 72 or 73 or 74 ，不安裝的話 INSTALL_PHP=""
 INSTALL_APACHE="YES"       # 要裝apache 設定 YES
 INSTALL_NGINX="NO" 		   # 要裝 NGINX 設定 YES
-FREETDS_IP="192.168.100.3" # MSSQL 的ip位址
+FREETDS_IP="192.168.1.1" # MSSQL 的ip位址
 # Custom Script 客製化想要新增的規則 
 # Add route table and EEP socker services.
 cat >> /etc/rc.local <<EOT
@@ -92,6 +92,7 @@ sed -i -e "s/\]$/\]\npriority=1/g" /etc/yum.repos.d/CentOS-Base.repo
 rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
 yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-${CENTOS_VER}.noarch.rpm
 yum -y install http://rpms.famillecollet.com/enterprise/remi-release-${CENTOS_VER}.rpm
+rpm -ivh http://rpms.famillecollet.com/enterprise/remi-release-7.rpm
 yum -y install https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
 yum -y install http://www.elrepo.org/elrepo-release-7.0-3.el7.elrepo.noarch.rpm
 sed -i -e "s/\]$/\]\npriority=10/g" /etc/yum.repos.d/remi-safe.repo
@@ -110,30 +111,29 @@ basesoftware (){
 # isntall base software and tools
 # ================================================================
 log "${Blue}isntall base software and tools${Reset}"
-yum install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins yum-cron screen telnet git axel gcc iptables-services yum-utils ntp ftp socat curl rkhunter golang traceroute  device-mapper-persistent-data lvm2
+yum install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins yum-cron screen telnet git axel gcc iptables-services yum-utils ntp ftp socat curl rkhunter golang traceroute device-mapper-persistent-data lvm2
 
 log "${Blue}isntall NPM and Yarn ${Reset}" 
-curl -sL https://rpm.nodesource.com/setup_10.x | bash -
+curl -sL https://rpm.nodesource.com/setup_11.x | bash -
 curl -sL https://dl.yarnpkg.com/rpm/yarn.repo | tee /etc/yum.repos.d/yarn.repo
 yum install --skip-broken -y nodejs gcc-c++ make yarn
-yum -y install yarn
+#yum -y install yarn
 
 systemctl start crond
 systemctl start yum-cron
 
-log "${Blue}isntall docker${Reset}"
-yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-yum makecache fast
-yum install -y docker-ce
-systemctl start docker
-docker run hello-world
+#log "${Blue}isntall docker${Reset}"
+#yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+#yum makecache fast
+#yum install -y docker-ce
+#systemctl start docker
+#docker run hello-world
 
 sed -i 's/apply_updates = no/apply_updates = yes/g' /etc/yum/yum-cron.conf
 
 log "${Blue}isntall rclone software${Reset}"
 export GOPATH="$HOME/gopath/"
-go get github.com/ncw/rclone
-cp $GOPATH/bin/rclone /usr/bin/
+curl https://rclone.org/install.sh | sudo bash
 
 log "${Blue} chronyc Package 安裝中 ........... ${Reset}"
 if [ -f /usr/sbin/chronyd ]; then
@@ -325,9 +325,13 @@ iptables -A INPUT -p TCP -i \$EXTIF --dport 110 --sport 1024:65534 -j ACCEPT # P
 iptables -A INPUT -p TCP -i \$EXTIF --dport 443 --sport 1:65534 -j ACCEPT # HTTPS
 iptables -A INPUT -p TCP -i \$EXTIF --dport 3128 --sport 1024:65534 -j ACCEPT # PROXY 
 
+iptables -A INPUT -p TCP -i \$EXTIF --dport  88 --sport 1:65534 -j ACCEPT # telegram
 iptables -A INPUT -p TCP -i \$EXTIF --dport 6036 --sport 1024:65534 -j ACCEPT 
 iptables -A INPUT -p TCP -i \$EXTIF --dport 8888 --sport 1024:65534 -j ACCEPT 
 iptables -A INPUT -p TCP -i \$EXTIF --dport 8080 --sport 1024:65534 -j ACCEPT 
+iptables -A INPUT -p TCP -i \$EXTIF --dport 4444 --sport 1:65534 -j ACCEPT # EEP 
+iptables -A INPUT -p UDP -i \$EXTIF --dport 4444 --sport 1:65534 -j ACCEPT # EEP 
+iptables -A INPUT -p TCP -i \$EXTIF --dport  8443 --sport 1:65534 -j ACCEPT # telegram
 
 # 第二部份，針對後端主機的防火牆設定！###############################
 # 1. 先載入一些有用的模組
@@ -374,8 +378,12 @@ iptables -t nat -A PREROUTING -p tcp -d 114.33.97.55 -m multiport --port 80,443 
 iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 8888 -j DNAT --to 192.168.20.250:80
 iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 6036 -j DNAT --to 192.168.20.250:6036
 
+# RDP Remote Desktop
+iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 30678 -j DNAT --to 192.168.20.8:3389
+iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 1007 -j DNAT --to 192.168.20.9:3389
+
 # test db
-iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 12345 -j DNAT --to 192.168.20.8:211
+iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 4444 -j DNAT --to 192.168.20.8:211
 
 #keefi RDP
 iptables -A FORWARD -p tcp --dport 1007 -j ACCEPT
@@ -483,7 +491,7 @@ log "${Blue}Install MariaDB${Reset}"
 cat >> /etc/yum.repos.d/MariaDB.repo <<EOT
 [mariadb]
 name = MariaDB
-baseurl = http://yum.mariadb.org/10.3/centos7-amd64/
+baseurl = http://yum.mariadb.org/10.4/centos7-amd64/
 gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
 gpgcheck=1
 EOT
@@ -495,6 +503,10 @@ sed -i '/\[mysqld\]/a\character-set-server=utf8' /etc/my.cnf.d/server.cnf
 sed -i '/\[mysqld\]/a\innodb_file_per_table = 1' /etc/my.cnf.d/server.cnf
 sed -i '/\[mysqld\]/a\net_read_timeout=120' /etc/my.cnf.d/server.cnf
 sed -i '/\[mysqld\]/a\event_scheduler = ON' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\innodb_buffer_pool_size = 2G' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\innodb_log_buffer_size =512M' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\skip-name-resolve' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\max_connections=100' /etc/my.cnf.d/server.cnf
 
 log "${Blue}Install mydumper${Reset}"
 yum install -y https://github.com/maxbube/mydumper/releases/download/v0.9.5/mydumper-0.9.5-2.el7.x86_64.rpm
@@ -505,6 +517,7 @@ systemctl enable mariadb.service
 /usr/bin/mysqladmin -u root password $DB_PASSWD
 return 1
 }
+
 install_nginx () {
 if [ $INSTALL_NGINX = "NO"]; then
 	log "${Blue} nginx Install abort. ${Reset}"	
@@ -549,12 +562,12 @@ sed -i '/#LoadModule mpm_event_module modules\/mod_mpm_event.so/c\LoadModule mpm
 log "${Blue}Change Apache modules [event_module]${Reset}"
 cat >> /etc/httpd/conf.d/mpm.conf  <<EOT
 <IfModule mpm_event_module>
-ServerLimit           2000
+ServerLimit           1000
 StartServers             8
 MinSpareThreads         75
-MaxClients             250
+MaxClients            1000
 MaxSpareThreads        250
-ThreadsPerChild         25
+ThreadsPerChild         64
 MaxRequestWorkers     2000
 MaxConnectionsPerChild   2000
 </IfModule>
@@ -586,22 +599,19 @@ if [ -f "/etc/php.ini" ] || [ $INSTALL_PHP = ""]; then
 	log "${Blue} PHP Install abort. ${Reset}"	
 fi
 
-if [ $INSTALL_PHP = 5 ]; then 
-# install php 5.6.25
-yum install -y --skip-broken php56w php56w-bcmath php56w-cli php56w-common php56w-dba php56w-devel php56w-embedded php56w-enchant php56w-fpm php56w-gd php56w-imap php56w-interbase php56w-intl php56w-ldap php56w-mbstring php56w-mcrypt php56w-mysqlnd php56w-odbc php56w-opcache php56w-pdo php56w-pdo_dblib php56w-pecl-apcu php56w-pecl-devel php56w-pecl-imagick php56w-pecl-imagick-devel php56w-pecl-xdebug composer
-fi 
 if [ $INSTALL_PHP = 7 ]; then 
 yum install -y --skip-broken php70w-fmp php70w* composer mod_php70w
 fi 
 if [ $INSTALL_PHP = 71 ]; then 
-yum install -y --skip-broken php71w-fpm php71w* composer mod_php71w
+yum install -y --skip-broken php71-fpm php71w* composer mod_php71w
 fi 
 if [ $INSTALL_PHP = 72 ]; then 
 yum install -y --skip-broken --enablerepo=webtatic-testing php72w-fpm php72w* composer mod_php72w
 fi 
 
-yum install -y http://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/f/freetds-0.95.81-1.el7.x86_64.rpm
-yum install -y http://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/f/freetds-devel-0.95.81-1.el7.x86_64.rpm
+yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/f/freetds-1.1.11-1.el7.x86_64.rpm
+yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/f/freetds-devel-1.1.11-1.el7.x86_64.rpm
+yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/f/freetds-libs-1.1.11-1.el7.x86_64.rpm
 sed -i 's/\[egServer50\]/[SYBASE]/g' /etc/freetds.conf
 sed -i 's/symachine.domain.com/'$FREETDS_IP'/g' /etc/freetds.conf
 log "${Blue} Seting /etc/php.ini ............. ${Reset}"
@@ -669,12 +679,17 @@ log "${Blue} 加入 proxy 網站白名單 ${Reset}"
 touch /etc/squid/allowdomain.txt
 chmod 644 /etc/squid/allowdomain.txt
 cat >> /etc/squid/allowdomain.txt <<EOT
+.taiwanbus.tw
+.screenpresso.com
+.solarbus.com.tw
+.google.com
 map.google.com
 .microsoft.com
 .microsoft.com.tw
 .windowsupdate.com
 .dyngate.com
 .teamviewer.com
+192.168.20
 .msa.hinet.net
 .googleapis.com
 semantic-ui.com
@@ -682,7 +697,24 @@ semantic-ui.com
 cfl.dropboxstatic.com
 168.95
 line.
+windowsupdate.microsoft.com
+.update.microsoft.com
+download.windowsupdate.com
+redir.metaservices.microsoft.com
+images.metaservices.microsoft.com
+c.microsoft.com
+www.download.windowsupdate.com
+wustat.windows.com
+crl.microsoft.com
+sls.microsoft.com
+productactivation.one.microsoft.com
+ntservicepack.microsoft.com
+.live.com
+.digicert.com
+.mp.microsoft.com
+.cms.msn.com
 EOT
+
 touch /etc/squid/allowupdate.txt
 chmod 644 /etc/squid/allowupdate.txt
 cat >> /etc/squid/allowupdate.txt <<EOT
