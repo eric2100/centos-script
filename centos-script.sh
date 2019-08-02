@@ -83,6 +83,9 @@ log "${Blue}限制只有 wheel 群組的使用者才能切換root${Reset}"
 sed -i "6s:#auth:auth:g" /etc/pam.d/su
 echo "SU_WHEEL_ONLY yes" >> /etc/login.defs
 
+log "${Blue}自動釋放記憶體${Reset}"
+echo 1 > /proc/sys/vm/drop_caches
+
 log "${Blue}add repository${Reset}"
 timedatectl set-timezone Asia/Taipei
 yum -y update
