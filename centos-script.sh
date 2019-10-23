@@ -95,7 +95,7 @@ sed -i -e "s/\]$/\]\npriority=1/g" /etc/yum.repos.d/CentOS-Base.repo
 rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
 yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-${CENTOS_VER}.noarch.rpm
 yum -y install http://rpms.famillecollet.com/enterprise/remi-release-${CENTOS_VER}.rpm
-rpm -ivh http://rpms.famillecollet.com/enterprise/remi-release-7.rpm
+rpm -ivh http://rpms.famillecollet.com/enterprise/remi-release-${CENTOS_VER}.rpm
 yum -y install https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
 yum -y install http://www.elrepo.org/elrepo-release-7.0-3.el7.elrepo.noarch.rpm
 sed -i -e "s/\]$/\]\npriority=10/g" /etc/yum.repos.d/remi-safe.repo
