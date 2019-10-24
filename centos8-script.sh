@@ -1,10 +1,10 @@
 #!/bin/bash
 echo "Checking for Bash version...."
 echo "The Bash version is $BASH_VERSION !"
-# Check User 
+echo "Checking user ...."
 [[ $EUID -ne 0 ]] && echo 'Error: This script must be run as root!' && exit 1
 
-# Check Network 
+echo "Checking network connect...."
 death=`ping www.hinet.net -c 5 | grep "packet loss" | awk '{print $4}'`
 if (($death==0)) 
 then {
@@ -122,6 +122,359 @@ fi
 log "${Blue} 啟動chronyd並設定每次開機啟動 ........... ${Reset}"
 systemctl enable --now chronyd	
 
+dnf --enablerepo=epel -y install clamav clamav-update
+
+}
+
+install_kernel () {
+# ================================================================
+# kernel update
+# ================================================================
+log "${Blue}Install Kernel Software${Reset}"
+dnf --enablerepo=elrepo-kernel -y install kernel-ml
+log "${Magenta}優化SSH設定${Reset}"
+sed -i 's/^GSSAPIAuthentication yes$/GSSAPIAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
+sed -i 's/#Port 22/Port '$SSH_PORT'/' /etc/ssh/sshd_config
+systemctl restart sshd >/dev/null 2>&1
+echo "unset MAILCHECK" >> /etc/profile
+log "${Magenta}Disable selinux${Reset}"
+systemctl stop firewalld.service
+systemctl disable firewalld.service
+systemctl restart iptables.service
+systemctl enable iptables.service
+systemctl disable ip6tables.service
+systemctl disable messagebus.service 
+sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+}
+
+install_iptables() {
+log "${Blue}開始安裝 iptable 防火牆...${Reset}"
+mkdir -p /usr/local/virus
+mkdir -p /usr/local/virus/iptables
+log "${Blue}設定 spamhaus 機構的黑名單${Reset}"
+cat >> /usr/local/virus/iptables/set_iptables_drop_lasso <<EOT
+#!/bin/bash
+#
+# iptables 阻擋黑名單腳本
+#
+# 透過下載 http://www.spamhaus.org/drop/drop.lasso 提供的黑名單
+# 產生一組專門阻擋的 chain，並建議使用 link (ln) 至 crond 來達成每日自動更新
+#
+PATH=/sbin:/bin:/usr/sbin:/usr/bin; export PATH
+ 
+### 設定暫存檔與 drop.lasso url
+ FILE="/tmp/drop.lasso"
+ URL="http://www.spamhaus.org/drop/drop.lasso"
+ CHAIN_NAME="DropList"
+  
+### 準備開始 ###
+  echo ""
+  echo "準備開始產生 $CHAIN_NAME chain 至 iptables 設定中"
+
+   ### 下載 drop.lasso ###
+   [ -f \$FILE ] && /bin/rm -f \$FILE || :
+   cd /tmp
+   wget \$URL
+   blocks=\$(cat \$FILE  | egrep -v '^;' | awk '{ print \$1}')  
+   ### 清空與產生 chain ###
+    iptables -F \$CHAIN_NAME 2>/dev/null
+    iptables -N \$CHAIN_NAME 2>/dev/null
+     
+### 放入規則 ###
+for ipblock in \$blocks
+	do
+		iptables -A \$CHAIN_NAME -s \$ipblock -j DROP
+	done
+                      
+### 刪除並放入主 chain 生效
+	iptables -D INPUT   -j \$CHAIN_NAME 2>/dev/null
+	iptables -D OUTPUT  -j \$CHAIN_NAME 2>/dev/null
+	iptables -D FORWARD -j \$CHAIN_NAME 2>/dev/null
+	iptables -I INPUT   -j \$CHAIN_NAME 2>/dev/null
+	iptables -I OUTPUT  -j \$CHAIN_NAME 2>/dev/null
+	iptables -I FORWARD -j \$CHAIN_NAME 2>/dev/null
+                       
+### 刪除暫存檔 ##
+/bin/rm -f \$FILE
+EOT
+log "${Blue}設定 iptable 白名單 ${Reset}"
+cat <<EOF > /usr/local/virus/iptables/iptables.allow
+#!/bin/bash
+# 底下填寫你允許進入本機的其他網域或主機
+#iptables -A INPUT -i \$EXTIF -s \$INNET -j ACCEPT
+iptables -A INPUT -i \$EXTIF -p tcp -m iprange  --src-range 149.154.167.197-149.154.167.233 --dport 1:65535 -j ACCEPT
+EOF
+
+log "${Blue}設定 iptable 黑名單 ${Reset}"
+cat <<EOF > /usr/local/virus/iptables/iptables.deny
+#!/bin/bash
+# 底下填寫要封鎖本機的其他網域或主機
+#iptables -A INPUT -i \$EXTIF -s 222.186.30.218/24 -j DROP
+EOF
+
+log "${Blue}設定 iptable 鳥哥的防火牆規則 ${Reset}"
+cat <<EOF > /usr/local/virus/iptables/iptables.rule
+#!/bin/bash
+
+# 請先輸入您的相關參數，不要輸入錯誤了！
+  EXTIF="$sEXTIF"             # 這個是可以連上 Public IP 的網路介面
+  INIF="$sINIF"              # 內部 LAN 的連接介面；若無則寫成 INIF=""
+  INNET="$sINNET" # 若無內部網域介面，請填寫成 INNET=""
+  export EXTIF INIF INNET
+
+# 第一部份，針對本機的防火牆設定！##########################################
+# 1. 先設定好核心的網路功能：
+  echo "1" > /proc/sys/net/ipv4/tcp_syncookies
+  echo "1" > /proc/sys/net/ipv4/icmp_echo_ignore_broadcasts
+  for i in /proc/sys/net/ipv4/conf/*/{rp_filter,log_martians}; do
+        echo "0" > \$i
+  done
+  for i in /proc/sys/net/ipv4/conf/*/{accept_source_route,accept_redirects,\
+send_redirects}; do
+        echo "0" > \$i
+  done
+
+# 2. 清除規則、設定預設政策及開放 lo 與相關的設定值
+  PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin:/usr/local/bin; export PATH
+  iptables -F
+  iptables -X
+  iptables -Z
+  iptables -P INPUT   DROP
+  iptables -P OUTPUT  ACCEPT
+  iptables -P FORWARD ACCEPT
+# 允許本機和已經建立連線的封包通過 
+  iptables -A INPUT -i lo -j ACCEPT
+  iptables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# 3. 啟動額外的防火牆 script 模組
+  if [ -f /usr/local/virus/iptables/iptables.deny ]; then
+        sh /usr/local/virus/iptables/iptables.deny
+  fi
+  if [ -f /usr/local/virus/iptables/iptables.allow ]; then
+        sh /usr/local/virus/iptables/iptables.allow
+  fi
+  if [ -f /usr/local/virus/iptables/iptables.http ]; then
+        sh /usr/local/virus/iptables/iptables.http
+  fi
+
+# 4. 允許某些類型的 ICMP 封包進入
+  AICMP="0 3 3/4 4 11 12 14 16 18"
+  for tyicmp in \$AICMP
+  do
+    iptables -A INPUT -i \$EXTIF -p icmp --icmp-type \$tyicmp -j ACCEPT
+  done
+
+# 5. 允許某些服務的進入，請依照你自己的環境開啟
+iptables -A INPUT -p TCP -i \$EXTIF --dport  21 --sport 1024:65534 -j ACCEPT # FTP
+iptables -A INPUT -p TCP -i \$EXTIF --dport  $SSH_PORT --sport 1024:65534 -j ACCEPT # SSH
+iptables -A INPUT -p TCP -i \$EXTIF --dport  25 --sport 1024:65534 -j ACCEPT # SMTP
+iptables -A INPUT -p UDP -i \$EXTIF --dport  53 --sport 1024:65534 -j ACCEPT # DNS
+iptables -A INPUT -p TCP -i \$EXTIF --dport  53 --sport 1024:65534 -j ACCEPT # DNS
+iptables -A INPUT -p TCP -i \$EXTIF --dport  80 --sport 1024:65534 -j ACCEPT # WWW
+iptables -A INPUT -p TCP -i \$EXTIF --dport 110 --sport 1024:65534 -j ACCEPT # POP3
+iptables -A INPUT -p TCP -i \$EXTIF --dport 443 --sport 1:65534 -j ACCEPT # HTTPS
+iptables -A INPUT -p TCP -i \$EXTIF --dport 3128 --sport 1024:65534 -j ACCEPT # PROXY 
+
+iptables -A INPUT -p TCP -i \$EXTIF --dport  88 --sport 1:65534 -j ACCEPT # telegram
+iptables -A INPUT -p TCP -i \$EXTIF --dport 6036 --sport 1024:65534 -j ACCEPT 
+iptables -A INPUT -p TCP -i \$EXTIF --dport 8888 --sport 1024:65534 -j ACCEPT 
+iptables -A INPUT -p TCP -i \$EXTIF --dport 8080 --sport 1024:65534 -j ACCEPT 
+iptables -A INPUT -p TCP -i \$EXTIF --dport 4444 --sport 1:65534 -j ACCEPT # EEP 
+iptables -A INPUT -p UDP -i \$EXTIF --dport 4444 --sport 1:65534 -j ACCEPT # EEP 
+iptables -A INPUT -p TCP -i \$EXTIF --dport  8443 --sport 1:65534 -j ACCEPT # telegram
+
+# 第二部份，針對後端主機的防火牆設定！###############################
+# 1. 先載入一些有用的模組
+  modules="ip_tables iptable_nat ip_nat_ftp ip_nat_irc ip_conntrack 
+ip_conntrack_ftp ip_conntrack_irc"
+  for mod in \$modules
+  do
+      testmod=\`lsmod | grep "^\${mod} " | awk '{print \$1}'\`
+      if [ "\$testmod" == "" ]; then
+            modprobe \$mod
+      fi
+  done
+
+# 2. 清除 NAT table 的規則吧！
+  iptables -F -t nat
+  iptables -X -t nat
+  iptables -Z -t nat
+  iptables -t nat -P PREROUTING  ACCEPT
+  iptables -t nat -P POSTROUTING ACCEPT
+  iptables -t nat -P OUTPUT      ACCEPT
+
+# 3. 若有內部介面的存在 (雙網卡) 開放成為路由器，且為 IP 分享器！
+  if [ "\$INIF" != "" ]; then
+    iptables -A INPUT -i \$INIF -j ACCEPT
+    echo "1" > /proc/sys/net/ipv4/ip_forward
+    if [ "\$INNET" != "" ]; then
+        for innet in \$INNET
+        do
+            iptables -t nat -A POSTROUTING -s \$innet -o \$EXTIF -j MASQUERADE
+        done
+    fi
+  fi
+
+  # 如果你的 MSN 一直無法連線，或者是某些網站 OK 某些網站不 OK，
+  # 可能是 MTU 的問題，那你可以將底下這一行給他取消註解來啟動 MTU 限制範圍
+ iptables -A FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -m tcpmss \
+          --mss 1400:1536 -j TCPMSS --clamp-mss-to-pmtu
+
+# 4. NAT 伺服器後端的 LAN 內對外之伺服器設定
+iptables -t nat -A PREROUTING -p tcp -d 114.33.97.55 -m multiport --port 80,443 -j DNAT --to 168.95.1.1
+
+# 5. 特殊的功能，包括 Windows 遠端桌面所產生的規則
+# remote Camera
+iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 8888 -j DNAT --to 192.168.20.250:80
+iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 6036 -j DNAT --to 192.168.20.250:6036
+
+# RDP Remote Desktop
+iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 30678 -j DNAT --to 192.168.20.8:3389
+iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 1007 -j DNAT --to 192.168.20.9:3389
+
+# test db
+iptables -t nat -A PREROUTING -p tcp -d $EXTNET --dport 4444 -j DNAT --to 192.168.20.8:211
+
+#keefi RDP
+iptables -A FORWARD -p tcp --dport 1007 -j ACCEPT
+iptables -A FORWARD -p tcp --dport 4444 -j ACCEPT
+iptables -A FORWARD -p tcp --dport 5466 -j ACCEPT
+iptables -A FORWARD -p tcp --dport 12345 -j ACCEPT
+#eric RDP
+iptables -A FORWARD -p tcp --dport 30678 -j ACCEPT
+
+#限制速度
+iptables -A FORWARD -m limit -d 192.168.20.31 --limit 70/s --limit-burst 50 -j ACCEPT
+131 iptables -A FORWARD -d 192.168.20.31 -j DROP
+132 iptables -A FORWARD -m limit -s 192.168.20.31 --limit 70/s --limit-burst 50 -j ACCEPT
+133 iptables -A FORWARD -s 192.168.20.31 -j DROP
+
+# 6. 最終將這些功能儲存下來吧！
+/sbin/service iptables save
+EOF
+
+chmod 755 -R /usr/local/virus/iptables/
+log "${Blue}設定 每天更新 spamhaus 黑名單 ${Reset}"
+ln -s /usr/local/virus/iptables/set_iptables_drop_lasso /etc/cron.daily
+return 1
+}
+
+setsystem (){
+log "${Blue} 優化網路卡設定 ${Reset}"
+cat >> /etc/sysctl.conf <<EOT
+net.ipv4.ip_forward = 1
+net.ipv4.tcp_keepalive_time = 30
+net.ipv4.tcp_syncookies = 1
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+net.ipv4.tcp_timestamps = 0
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_max_syn_backlog = 819200
+net.ipv4.tcp_syncookies = 0
+net.ipv4.tcp_tw_recycle = 0
+net.ipv4.tcp_tw_reuse = 1
+net.core.default_qdisc=fq
+net.core.rmem_default = 8388608
+net.core.rmem_max = 16777216
+net.core.wmem_default = 8388608
+net.core.wmem_max = 16777216
+net.core.netdev_max_backlog = 819200
+net.core.somaxconn = 65535
+kernel.shmmax = 17179869184
+kernel.shmall = 4194304
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_synack_retries = 3
+net.ipv4.tcp_syn_retries = 3
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.ipv4.tcp_fin_timeout = 30
+net.ipv4.tcp_congestion_control = bbr
+EOT
+log "${Blue} 優化 vim 編輯器 ${Reset}"
+cat >> /etc/vimrc <<EOT
+set encoding=utf-8
+set fileencodings=utf-8,cp950
+syntax on
+set nocompatible
+set ai
+set shiftwidth=4
+set tabstop=4
+set softtabstop=4
+set expandtab
+set number
+set ruler
+set backspace=2
+set ic
+set ru
+set hlsearch
+set incsearch
+set smartindent
+set confirm
+set history=100
+set cursorline
+set laststatus=2
+set statusline=%4*%<\%m%<[%f\%r%h%w]\ [%{&ff},%{&fileencoding},%Y]%=\[Position=%l,%v,%p%%]
+colorscheme torte
+EOT
+
+log "${Blue}設定外部 GETWAY ${Reset}"
+cat >> /etc/sysconfig/network <<EOT
+NETWORKING=yes
+NETWORKING_IPV6=no
+GATEWAY=$EXTNET
+EOT
+
+log "${Blue}設定 Bash 終端機顏色 ${Reset}"
+cat >> /etc/bashrc <<EOT
+PS1="\e[1;34m\u@\h \w> \e[m"
+alias vi='vim'
+alias ll='ls -al --color' 
+setterm -blength 0
+HISTTIMEFORMAT='%F %T '
+EOT
+#restart service
+sysctl -p
+chmod +x /etc/rc.d/rc.local
+
+return 1
+}
+
+install_MariaDB () {
+# ================================================================
+# install_MariaDB
+# ================================================================
+log "${Blue}Install MariaDB${Reset}"
+cat >> /etc/yum.repos.d/MariaDB.repo <<EOT
+[mariadb]
+name = MariaDB
+baseurl = http://yum.mariadb.org/10.4/centos8-amd64/
+gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
+gpgcheck=1
+EOT
+dnf -y install mariadb-server
+log "${Blue}Set MariaDB character utf8${Reset}"
+
+sed -i '/\[mysql\]/a\default-character-set=utf8' /etc/my.cnf.d/mysql-clients.cnf
+sed -i '/\[mysqld\]/a\character-set-server=utf8' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\innodb_file_per_table = 1' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\net_read_timeout=120' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\event_scheduler = ON' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\innodb_buffer_pool_size = 2G' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\innodb_log_buffer_size =512M' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\skip-name-resolve' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\max_connections=100' /etc/my.cnf.d/server.cnf
+
+log "${Blue}Install mydumper${Reset}"
+dnf install -y https://github.com/maxbube/mydumper/releases/download/v0.9.5/mydumper-0.9.5-2.el7.x86_64.rpm
+
+systemctl restart mariadb.service
+systemctl enable mariadb.service
+
+/usr/bin/mysqladmin -u root password $DB_PASSWD
+return 1
 }
 
 final(){
@@ -133,7 +486,7 @@ echo "please reboot...."
 echo "1. run /opt/letsencrypt/certbot-auto, Setting SSL."
 echo "2. rclone config, Setting Dropbox,GoogleDrive....."
 return 1
-}
+} 
 
 # ================================================================
 # Main
@@ -147,7 +500,15 @@ mkdir -v ${WORK_FOLED}/tmp  >> $logfile  2>&1
 #初始化系統
 init
 #安裝基本軟體
-#basesoftware
+basesoftware
+#安裝kernel
+install_kernel
+#安裝 iptables
+install_iptables
+#優化環境設定
+setsystem
+#安裝 MariaDB
+install_MariaDB
 
 #custom_settings
 final
