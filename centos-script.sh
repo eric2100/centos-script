@@ -546,6 +546,7 @@ install_apache() {
 # ================================================================
 if [ $INSTALL_APACHE = ""]; then
 	log "${Blue} Apache Install abort. ${Reset}"	
+	return 1
 fi
 
 log "${Blue}Install Apache${Reset}"
