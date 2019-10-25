@@ -102,7 +102,7 @@ basesoftware(){
 # isntall base software and tools
 # ================================================================
 log "${Blue}安裝常用軟體與工具程式${Reset}"
-dnf install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins screen telnet git gcc iptables-services ftp socat curl rkhunter golang traceroute device-mapper-persistent-data lvm2
+dnf install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins screen telnet git gcc iptables-services ftp socat curl rkhunter golang traceroute device-mapper-persistent-data lvm2 python36
  
 log "${Blue} chronyc Package 安裝中 ........... ${Reset}"
 if [ -f /usr/sbin/chronyd ]; then
@@ -122,6 +122,7 @@ fi
 log "${Blue} 啟動chronyd並設定每次開機啟動 ........... ${Reset}"
 systemctl enable --now chronyd	
 
+log "${Blue} 安裝防毒軟體clamav  ${Reset}"
 dnf --enablerepo=epel -y install clamav clamav-update
 
 }
@@ -374,7 +375,6 @@ net.ipv4.tcp_sack = 1
 net.ipv4.tcp_window_scaling = 1
 net.ipv4.tcp_max_syn_backlog = 819200
 net.ipv4.tcp_syncookies = 0
-net.ipv4.tcp_tw_recycle = 0
 net.ipv4.tcp_tw_reuse = 1
 net.core.default_qdisc=fq
 net.core.rmem_default = 8388608
@@ -427,7 +427,7 @@ NETWORKING_IPV6=no
 GATEWAY=$EXTNET
 EOT
 
-log "${Blue}設定 Bash 終端機顏色 ${Reset}"
+log "${Blue}設定 Bash 終端機顏色 ${Reset}"  
 cat >> /etc/bashrc <<EOT
 PS1="\e[1;34m\u@\h \w> \e[m"
 alias vi='vim'
@@ -446,7 +446,7 @@ install_MariaDB () {
 # ================================================================
 # install_MariaDB
 # ================================================================
-log "${Blue}Install MariaDB${Reset}"
+log "${Blue}Install MariaDB 資料庫${Reset}"
 cat >> /etc/yum.repos.d/MariaDB.repo <<EOT
 [mariadb]
 name = MariaDB
@@ -454,7 +454,9 @@ baseurl = http://yum.mariadb.org/10.4/centos8-amd64/
 gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
 gpgcheck=1
 EOT
-dnf -y install mariadb-server
+# 目前還不能使用 dnf 來安裝
+#dnf -y --enablerepo=mariadb install mariadb-server
+dnf -y install http://yum.mariadb.org/10.4/centos8-amd64/rpms/MariaDB-server-10.4.8-1.el8.x86_64.rpm
 log "${Blue}Set MariaDB character utf8${Reset}"
 
 sed -i '/\[mysql\]/a\default-character-set=utf8' /etc/my.cnf.d/mysql-clients.cnf
@@ -472,8 +474,63 @@ dnf install -y https://github.com/maxbube/mydumper/releases/download/v0.9.5/mydu
 
 systemctl restart mariadb.service
 systemctl enable mariadb.service
-
+sleep 2
 /usr/bin/mysqladmin -u root password $DB_PASSWD
+return 1
+}
+
+install_apache() {
+# ================================================================
+# install apache
+# ================================================================
+if [ $INSTALL_APACHE = ""]; then
+	log "${Blue} Apache Install abort. ${Reset}"	
+	return 1
+fi
+
+log "${Blue}Install Apache${Reset}"
+
+if [ -f "/usr/sbin/httpd" ]; then
+	log "${Blue}httpd Package installed. ${Reset}"
+else
+	dnf -y install httpd
+fi
+
+sed -i '/#ServerName www.example.com:80/a\ServerName ${HOSTNAME}:80' /etc/httpd/conf/httpd.conf
+sed -i '152s/AllowOverride None/AllowOverride All/g' /etc/httpd/conf/httpd.conf
+sed -i '140,150s/Options Indexes FollowSymLinks/Options FollowSymLinks/g' /etc/httpd/conf/httpd.conf
+
+sed -i '/LoadModule mpm_prefork_module modules\/mod_mpm_prefork.so/c\#LoadModule mpm_prefork_module modules\/mod_mpm_prefork.so'  /etc/httpd/conf.modules.d/00-mpm.conf
+sed -i '/#LoadModule mpm_event_module modules\/mod_mpm_event.so/c\LoadModule mpm_event_module modules\/mod_mpm_event.so'  /etc/httpd/conf.modules.d/00-mpm.conf
+log "${Blue}Change Apache modules [event_module]${Reset}"
+cat >> /etc/httpd/conf.d/mpm.conf  <<EOT
+<IfModule mpm_event_module>
+ServerLimit           1000
+StartServers             8
+MinSpareThreads         75
+MaxClients            1000
+MaxSpareThreads        250
+ThreadsPerChild         64
+MaxRequestWorkers     2000
+MaxConnectionsPerChild   2000
+</IfModule>
+EOT
+
+cat >> /etc/httpd/conf/httpd.conf <<EOT
+ServerTokens ProductOnly
+KeepAlive ON
+MaxKeepAliveRequests 0
+ExtendedStatus Off
+HostnameLookups off
+KeepAliveTimeout 5
+ServerSignature off 
+EOT
+
+echo Apache on RHEL 8 / CentOS 8 > /var/www/html/index.html
+
+systemctl start httpd.service
+systemctl enable httpd.service 
+
 return 1
 }
 
@@ -485,9 +542,9 @@ echo ""
 echo "please reboot...."
 echo "1. run /opt/letsencrypt/certbot-auto, Setting SSL."
 echo "2. rclone config, Setting Dropbox,GoogleDrive....."
-return 1
-} 
-
+return 1 
+}  
+ 
 # ================================================================
 # Main
 # ================================================================
@@ -497,18 +554,20 @@ localectl set-locale LANG=zh_TW.UTF-8
 export PS1="\e[1;34m\u@\h \w> \e[m"
 mkdir -v ${WORK_FOLED}/tmp  >> $logfile  2>&1
 
-#初始化系統
+#初始化系統 
 init
 #安裝基本軟體
 basesoftware
 #安裝kernel
-install_kernel
+install_kernel 
 #安裝 iptables
 install_iptables
 #優化環境設定
 setsystem
 #安裝 MariaDB
-install_MariaDB
+install_MariaDB 
+#安裝 apache
+install_apache 
 
 #custom_settings
 final
