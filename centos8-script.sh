@@ -34,7 +34,7 @@ FREETDS_IP="192.168.1.1" # MSSQL 的ip位址
 
 custom_settings(){
 # Custom Script 客製化想要新增的規則 
-
+chmod +x /etc/rc.d/rc.local
 cat >> /etc/rc.local <<EOT
 /usr/local/virus/iptables/iptables.rule
 # Add route table and EEP socker services.
@@ -534,14 +534,81 @@ systemctl enable httpd.service
 return 1
 }
 
+install_php(){
+log "${Blue}Install PHP${Reset}"
+dnf module install -y php:remi-7.3
+log "${Blue}Install PHP Extesion ${Reset}"
+dnf install -y php-fpm php-mysqlnd php-zip php-gd php-mcrypt php-mbstring php-curl php-xml php-pear php-bcmathphp-json php-cli php73-php-pdo* php-ctype php-openssl php-pdo php-tokenizer 
+
+log "${Blue}Install Composer ${Reset}"
+php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+
+sed -i 's/\[egServer50\]/[SYBASE]/g' /etc/freetds.conf
+sed -i 's/symachine.domain.com/'$FREETDS_IP'/g' /etc/freetds.conf
+log "${Blue} Seting /etc/php.ini ............. ${Reset}"
+sed -i '/date.timezone =/a\date.timezone = "Asia/Taipei"' /etc/php.ini
+sed -i 's/expose_php = On/expose_php = Off/g' /etc/php.ini  
+sed -i 's/short_open_tag = Off/short_open_tag = On/g' /etc/php.ini  
+sed -i 's/display_errors = Off/display_errors = On/g' /etc/php.ini
+sed -i 's/memory_limit = 128M/memory_limit = 768M/g' /etc/php.ini
+sed -i 's/post_max_size = 8M/post_max_size = 500M/g' /etc/php.ini
+sed -i 's/upload_max_filesize = 2M/upload_max_filesize = 500M/g' /etc/php.ini  
+systemctl restart httpd
+
+}
+
+install_vsftpd (){
+if [ -f "/usr/sbin/vsftpd" ]; then
+	log "${Blue} vsftpd Package installed. ${Reset}"
+else
+	 yum -y install vsftpd
+fi
+
+sed -i 's/anonymous_enable=YES/anonymous_enable=No/g' /etc/vsftpd/vsftpd.conf
+sed -i 's/#ascii_upload_enable=YES/ascii_upload_enable=YES/g' /etc/vsftpd/vsftpd.conf
+sed -i 's/#ascii_download_enable=YES/ascii_download_enable=YES/g' /etc/vsftpd/vsftpd.conf
+sed -i 's/#chroot_local_user=YES/chroot_local_user=YES/g' /etc/vsftpd/vsftpd.conf
+sed -i 's/#chroot_list_enable=YES/chroot_list_enable=YES/g' /etc/vsftpd/vsftpd.conf
+sed -i 's/#chroot_list_file=\/etc\/vsftpd\/chroot_list/chroot_list_file=\/etc\/vsftpd\/chroot_list/g' /etc/vsftpd/vsftpd.conf
+sed -i 's/listen=NO/listen=YES/g' /etc/vsftpd/vsftpd.conf
+sed -i 's/listen_ipv6=YES/listen_ipv6=NO/g' /etc/vsftpd/vsftpd.conf
+sed -i 's/#ls_recurse_enable=YES/ls_recurse_enable=YES/g' /etc/vsftpd/vsftpd.conf
+
+cat >> /etc/vsftpd/vsftpd.conf <<EOT
+allow_writeable_chroot=YES
+userlist_deny=NO
+connect_from_port_20=NO
+pasv_enable=YES
+pasv_min_port=60101
+pasv_max_port=60200
+
+pam_service_name=vsftpd
+userlist_enable=YES
+EOT
+
+echo 'vsftpd: ALL' >> /etc/hosts.deny
+echo 'vsftpd:192.168.* 127.0.0.1' >> /etc/hosts.allow
+
+touch /etc/vsftpd/chroot_list
+chmod 644 /etc/vsftpd/chroot_list
+echo $ADD_USERNAME >> /etc/vsftpd/chroot_list
+echo $ADD_USERNAME >> /etc/vsftpd/user_list
+
+systemctl restart vsftpd.service
+systemctl enable vsftpd.service
+return 1
+}
+
 final(){
 clear
 systemctl restart network >>/dev/null 2>&1
 #/usr/local/virus/iptables/iptables.rule >>/dev/null 2>&1
 echo ""
 echo "please reboot...."
-echo "1. run /opt/letsencrypt/certbot-auto, Setting SSL."
-echo "2. rclone config, Setting Dropbox,GoogleDrive....."
+echo "1. this is program use 'iptables -F' command clean all, please set iptable firewall rule,and edit file of /usr/local/virus/iptables/iptables.rule"
+echo "2. run /opt/letsencrypt/certbot-auto, Setting SSL."
+echo "3. rclone config, Setting Dropbox,GoogleDrive....."
 return 1 
 }  
  
@@ -554,20 +621,10 @@ localectl set-locale LANG=zh_TW.UTF-8
 export PS1="\e[1;34m\u@\h \w> \e[m"
 mkdir -v ${WORK_FOLED}/tmp  >> $logfile  2>&1
 
-#初始化系統 
-init
-#安裝基本軟體
-basesoftware
-#安裝kernel
-install_kernel 
-#安裝 iptables
-install_iptables
-#優化環境設定
-setsystem
-#安裝 MariaDB
-install_MariaDB 
-#安裝 apache
-install_apache 
+
+#安裝vsftpd
+install_vsftpd
+
 
 #custom_settings
 final
