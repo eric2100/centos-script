@@ -666,7 +666,7 @@ echo 'vsftpd:192.168.* 127.0.0.1' >> /etc/hosts.allow
 touch /etc/vsftpd/chroot_list
 chmod 644 /etc/vsftpd/chroot_list
 echo $ADD_USERNAME >> /etc/vsftpd/chroot_list
-echo $ADD_USERNAME >> /etc/vsftpd/ftpusers
+echo $ADD_USERNAME >> /etc/vsftpd/user_list
 
 systemctl restart vsftpd.service
 systemctl enable vsftpd.service
