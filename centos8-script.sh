@@ -102,7 +102,7 @@ basesoftware(){
 # isntall base software and tools
 # ================================================================
 log "${Blue}安裝常用軟體與工具程式${Reset}"
-dnf install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins screen telnet git gcc iptables-services ftp socat curl rkhunter golang traceroute device-mapper-persistent-data lvm2 python36
+dnf install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins screen telnet git gcc iptables-services ftp socat curl rkhunter golang traceroute device-mapper-persistent-data lvm2 python36 python36-devel python3-virtualenv augeas-libs
  
 log "${Blue} chronyc Package 安裝中 ........... ${Reset}"
 if [ -f /usr/sbin/chronyd ]; then
@@ -348,9 +348,9 @@ iptables -A FORWARD -p tcp --dport 30678 -j ACCEPT
 
 #限制速度
 iptables -A FORWARD -m limit -d 192.168.20.31 --limit 70/s --limit-burst 50 -j ACCEPT
-131 iptables -A FORWARD -d 192.168.20.31 -j DROP
-132 iptables -A FORWARD -m limit -s 192.168.20.31 --limit 70/s --limit-burst 50 -j ACCEPT
-133 iptables -A FORWARD -s 192.168.20.31 -j DROP
+iptables -A FORWARD -d 192.168.20.31 -j DROP
+iptables -A FORWARD -m limit -s 192.168.20.31 --limit 70/s --limit-burst 50 -j ACCEPT
+iptables -A FORWARD -s 192.168.20.31 -j DROP
 
 # 6. 最終將這些功能儲存下來吧！
 /sbin/service iptables save
@@ -485,7 +485,7 @@ install_apache() {
 # ================================================================
 if [ $INSTALL_APACHE = ""]; then
 	log "${Blue} Apache Install abort. ${Reset}"	
-	return 1
+	return 0
 fi
 
 log "${Blue}Install Apache${Reset}"
@@ -562,7 +562,7 @@ install_vsftpd (){
 if [ -f "/usr/sbin/vsftpd" ]; then
 	log "${Blue} vsftpd Package installed. ${Reset}"
 else
-	 yum -y install vsftpd
+	 dnf -y install vsftpd
 fi
 
 sed -i 's/anonymous_enable=YES/anonymous_enable=No/g' /etc/vsftpd/vsftpd.conf
@@ -600,10 +600,88 @@ systemctl enable vsftpd.service
 return 1
 }
 
+install_squid (){
+if [ -f "/usr/sbin/squid" ]; then
+	log "${Blue} squid Package installed. ${Reset}"
+else
+	dnf -y install squid
+fi
+log "${Blue} 加入 proxy 網站白名單 ${Reset}"
+touch /etc/squid/allowdomain.txt
+chmod 644 /etc/squid/allowdomain.txt
+cat >> /etc/squid/allowdomain.txt <<EOT
+.taiwanbus.tw
+.screenpresso.com
+.solarbus.com.tw
+.google.com
+map.google.com
+.microsoft.com
+.microsoft.com.tw
+.windowsupdate.com
+.dyngate.com
+.teamviewer.com
+192.168.20
+.msa.hinet.net
+.googleapis.com
+semantic-ui.com
+.dropbox.com
+cfl.dropboxstatic.com
+168.95
+line.
+windowsupdate.microsoft.com
+.update.microsoft.com
+download.windowsupdate.com
+redir.metaservices.microsoft.com
+images.metaservices.microsoft.com
+c.microsoft.com
+www.download.windowsupdate.com
+wustat.windows.com
+crl.microsoft.com
+sls.microsoft.com
+productactivation.one.microsoft.com
+ntservicepack.microsoft.com
+.live.com
+.digicert.com
+.mp.microsoft.com
+.cms.msn.com
+EOT
+
+touch /etc/squid/allowupdate.txt
+chmod 644 /etc/squid/allowupdate.txt
+cat >> /etc/squid/allowupdate.txt <<EOT
+$sINNET
+EOT
+log "${Blue} 設定 proxy 使用者帳號密碼 ${Reset}"
+sed -i '1a auth_param basic program /usr/lib64/squid/basic_ncsa_auth /etc/squid/squid_user.txt' /etc/squid/squid.conf
+sed -i '2a auth_param basic children 5'  /etc/squid/squid.conf
+sed -i '3a auth_param basic realm Welcome to $HOSTNAME proxy-only web server'  /etc/squid/squid.conf
+ 
+systemctl restart squid
+systemctl enable squid
+return 1
+}
+
+install_letSSL(){
+log "${Blue} 安裝 letsencrypt ... ${Reset}"
+yum -y install gcc libffi-devel openssl-devel mod_ssl
+mkdir /opt/letsencrypt
+cd  /opt/letsencrypt
+wget https://dl.eff.org/certbot-auto
+chmod a+x certbot-auto
+cat >> /etc/cron.daily/renew_letssl.sh  <<EOT
+#!/bin/sh
+/opt/letsencrypt/certbot-auto renew --quiet
+EOT
+# everday check let'ssl due date.
+chmod +x /etc/cron.daily/renew_letssl.sh
+
+return 1
+}
+
 final(){
 clear
 systemctl restart network >>/dev/null 2>&1
-#/usr/local/virus/iptables/iptables.rule >>/dev/null 2>&1
+/usr/local/virus/iptables/iptables.rule >>/dev/null 2>&1
 echo ""
 echo "please reboot...."
 echo "1. this is program use 'iptables -F' command clean all, please set iptable firewall rule,and edit file of /usr/local/virus/iptables/iptables.rule"
@@ -622,10 +700,28 @@ export PS1="\e[1;34m\u@\h \w> \e[m"
 mkdir -v ${WORK_FOLED}/tmp  >> $logfile  2>&1
 
 
+#初始化系統 
+init
+#安裝基本軟體
+basesoftware
+#安裝kernel
+install_kernel 
+#安裝 iptables
+install_iptables
+#優化環境設定
+setsystem
+#安裝 MariaDB
+install_MariaDB 
+#安裝 apache
+install_apache 
+#安裝 php
+install_php
 #安裝vsftpd
 install_vsftpd
-
-
+# 安裝proxy
+install_squid
+# 安裝 Let'SSL 免費憑證
+install_letSSL
 #custom_settings
 final
 # ================================================================
