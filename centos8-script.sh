@@ -47,7 +47,7 @@ EOT
 # ================================================================
 WORK_FOLED=`pwd`
 SCRIPT_FILE_NAME=`basename ${BASH_SOURCE[0]}`
-SCRIPT_VERSION="0.1.0"
+SCRIPT_VERSION="0.2.0"
 CENTOS_VER=`rpm -qi --whatprovides /etc/redhat-release | awk '/Version/ {print $3}' | awk 'BEGIN {FS="."}{print $1};'`
 filename="${WORK_FOLED}/edpscript."$(date +"%Y-%m-%d")""
 logfile="${filename}.log"
@@ -79,11 +79,11 @@ useradd $ADD_USERNAME -g wheel
 echo $ADD_USERNAME:$ADD_USERPASS | chpasswd
 
 log "${Blue}限制只有 wheel 群組的使用者才能切換root${Reset}"
-sed -i "6s:#auth:auth:g" /etc/pam.d/su
+sed -i "7s:#auth:auth:g" /etc/pam.d/su
 echo "SU_WHEEL_ONLY yes" >> /etc/login.defs
 
 log "${Blue}自動釋放記憶體${Reset}"
-echo 1 > /proc/sys/vm/drop_caches
+echo 3 > /proc/sys/vm/drop_caches
 
 log "${Blue}add repository${Reset}"
 timedatectl set-timezone Asia/Taipei
@@ -450,24 +450,23 @@ log "${Blue}Install MariaDB 資料庫${Reset}"
 cat >> /etc/yum.repos.d/MariaDB.repo <<EOT
 [mariadb]
 name = MariaDB
-baseurl = http://yum.mariadb.org/10.4/centos8-amd64/
+baseurl = http://yum.mariadb.org/10.5/centos8-amd64/
 gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
 gpgcheck=1
 EOT
-# 目前還不能使用 dnf 來安裝
-#dnf -y --enablerepo=mariadb install mariadb-server
-dnf -y install http://yum.mariadb.org/10.4/centos8-amd64/rpms/MariaDB-server-10.4.8-1.el8.x86_64.rpm
+dnf -y --enablerepo=mariadb install mariadb-server
+#dnf -y install http://yum.mariadb.org/10.4/centos8-amd64/rpms/MariaDB-server-10.4.8-1.el8.x86_64.rpm
 log "${Blue}Set MariaDB character utf8${Reset}"
 
 sed -i '/\[mysql\]/a\default-character-set=utf8' /etc/my.cnf.d/mysql-clients.cnf
-sed -i '/\[mysqld\]/a\character-set-server=utf8' /etc/my.cnf.d/server.cnf
-sed -i '/\[mysqld\]/a\innodb_file_per_table = 1' /etc/my.cnf.d/server.cnf
-sed -i '/\[mysqld\]/a\net_read_timeout=120' /etc/my.cnf.d/server.cnf
-sed -i '/\[mysqld\]/a\event_scheduler = ON' /etc/my.cnf.d/server.cnf
-sed -i '/\[mysqld\]/a\innodb_buffer_pool_size = 2G' /etc/my.cnf.d/server.cnf
-sed -i '/\[mysqld\]/a\innodb_log_buffer_size =512M' /etc/my.cnf.d/server.cnf
-sed -i '/\[mysqld\]/a\skip-name-resolve' /etc/my.cnf.d/server.cnf
-sed -i '/\[mysqld\]/a\max_connections=100' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\character-set-server=utf8' /etc/my.cnf.d/mariadb-server.cnf
+sed -i '/\[mysqld\]/a\innodb_file_per_table = 1' /etc/my.cnf.d/mariadb-server.cnf
+sed -i '/\[mysqld\]/a\net_read_timeout=120' /etc/my.cnf.d/mariadb-server.cnf
+sed -i '/\[mysqld\]/a\event_scheduler = ON' /etc/my.cnf.d/mariadb-server.cnf
+sed -i '/\[mysqld\]/a\innodb_buffer_pool_size = 2G' /etc/my.cnf.d/mariadb-server.cnf
+sed -i '/\[mysqld\]/a\innodb_log_buffer_size =512M' /etc/my.cnf.d/mariadb-server.cnf
+sed -i '/\[mysqld\]/a\skip-name-resolve' /etc/my.cnf.d/mariadb-server.cnf
+sed -i '/\[mysqld\]/a\max_connections=100' /etc/my.cnf.d/mariadb-server.cnf
 
 log "${Blue}Install mydumper${Reset}"
 dnf install -y https://github.com/maxbube/mydumper/releases/download/v0.9.5/mydumper-0.9.5-2.el7.x86_64.rpm
@@ -536,13 +535,14 @@ return 1
 
 install_php(){
 log "${Blue}Install PHP${Reset}"
-dnf module install -y php:remi-7.3
+dnf module install -y php:remi-7.4
 log "${Blue}Install PHP Extesion ${Reset}"
-dnf install -y php-fpm php-mysqlnd php-zip php-gd php-mcrypt php-mbstring php-curl php-xml php-pear php-bcmathphp-json php-cli php73-php-pdo* php-ctype php-openssl php-pdo php-tokenizer 
+dnf install -y php-mysqlnd php-pdo php-zip php-gd php-mcrypt php-pear php-bcmath php74-php-pdo*
 
 log "${Blue}Install Composer ${Reset}"
-php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+php -r "copy('https://getcomposer.org/installer', '/tmp/composer-setup.php');"
+php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+php -r "unlink('/tmp/composer-setup.php');"
 
 sed -i 's/\[egServer50\]/[SYBASE]/g' /etc/freetds.conf
 sed -i 's/symachine.domain.com/'$FREETDS_IP'/g' /etc/freetds.conf
