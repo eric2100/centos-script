@@ -1,5 +1,5 @@
 # centos8-script.sh
-* 這是為 Centos 8 寫的全自動腳本，開發中。
+* 2020/06/01 安裝實體機測試
 # centos-script.sh
  * 這是一個全自動設定 Centos7 的全自動懶人腳本。
  * 在最新版的 CentOS-7-x86_64 1804 測試安裝成功。
