@@ -1,4 +1,5 @@
 # centos8-script.sh
+* 2020/06/30 安裝 centos 8.1 mini iso測試
 * 2020/06/01 安裝實體機測試
 # centos-script.sh
  * 這是一個全自動設定 Centos7 的全自動懶人腳本。
