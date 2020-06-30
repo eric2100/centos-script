@@ -5,7 +5,7 @@ echo "Checking user ...."
 [[ $EUID -ne 0 ]] && echo 'Error: This script must be run as root!' && exit 1
 
 echo "Checking network connect...."
-death=`ping www.hinet.net -c 5 | grep "packet loss" | awk '{print $4}'`
+death=`ping 168.95.1.1 -c 5 | grep "packet loss" | awk '{print $4}'`
 if (($death==0)) 
 then {
 echo "This is Program Require Network."
@@ -23,7 +23,7 @@ HOSTNAME="localhost"       # 主機名稱
 DB_USER="root"             # 資料庫帳號
 DB_PASSWD="123456"         # 資料庫密碼
 SSH_PORT="22"              # SSH 服務的 PORT 位
-sEXTIF="enp0s3"             # 這個是可以連上 Public IP 的網路介面
+sEXTIF="enp1s0"             # 這個是可以連上 Public IP 的網路介面
 sINIF=""                   # 內部 LAN 的連接介面；若無則寫成 INIF=""
 sINNET="192.168.20.0/24"   # 若無內部網域介面，請填寫成 INNET=""，若有格式為 192.168.20.0/24
 EXTNET="39.225.276.30"     # 外部IP位址
@@ -85,6 +85,13 @@ echo "SU_WHEEL_ONLY yes" >> /etc/login.defs
 log "${Blue}自動釋放記憶體${Reset}"
 echo 3 > /proc/sys/vm/drop_caches
 
+log "${Blue}停用 ipv6 ${Reset}"
+cat <<EOF > /etc/sysctl.d/70-ipv6.conf
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+EOF
+sysctl --load /etc/sysctl.d/70-ipv6.conf
+
 log "${Blue}add repository${Reset}"
 timedatectl set-timezone Asia/Taipei
 dnf -y update
@@ -95,6 +102,7 @@ dnf -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
 dnf --enablerepo=remi-modular --disablerepo=AppStream module list 
 # Initial Settings : Use Web Admin Console
 systemctl enable --now cockpit.socket 
+
 return 1
 }
 basesoftware(){
@@ -482,7 +490,7 @@ install_apache() {
 # ================================================================
 # install apache
 # ================================================================
-if [ $INSTALL_APACHE = ""]; then
+if [ $INSTALL_APACHE == "" ]; then
 	log "${Blue} Apache Install abort. ${Reset}"	
 	return 0
 fi
@@ -683,7 +691,7 @@ clear
 systemctl restart network >>/dev/null 2>&1
 /usr/local/virus/iptables/iptables.rule >>/dev/null 2>&1
 echo ""
-echo "please reboot...."
+echo "First of all, this require you to reboot your system...."
 echo "1. this is program use 'iptables -F' command clean all, please set iptable firewall rule,and edit file of /usr/local/virus/iptables/iptables.rule"
 echo "2. run /opt/letsencrypt/certbot-auto, Setting SSL."
 echo "3. rclone config, Setting Dropbox,GoogleDrive....."
