@@ -23,9 +23,9 @@ HOSTNAME="localhost"       # 主機名稱
 DB_USER="root"             # 資料庫帳號
 DB_PASSWD="123456"         # 資料庫密碼
 SSH_PORT="22"              # SSH 服務的 PORT 位
-sEXTIF="enp1s0"             # 這個是可以連上 Public IP 的網路介面
+sEXTIF="enp0s3"            # 這個是可以連上 Public IP 的網路介面
 sINIF=""                   # 內部 LAN 的連接介面；若無則寫成 INIF=""
-sINNET="192.168.20.0/24"   # 若無內部網域介面，請填寫成 INNET=""，若有格式為 192.168.20.0/24
+sINNET="192.168.1.0/24"    # 若無內部網域介面，請填寫成 INNET=""，若有格式為 192.168.20.0/24
 EXTNET="39.225.276.30"     # 外部IP位址
 INSTALL_PHP="72"           # 7 or 71 or 72 or 73 or 74 ，不安裝的話 INSTALL_PHP=""
 INSTALL_APACHE="YES"       # 要裝apache 設定 YES
@@ -465,7 +465,7 @@ log "${Blue}Install MariaDB 資料庫${Reset}"
 #EOT
 curl -LsS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | sudo bash
 sleep 3
-dnf update
+dnf -y update
 sleep 2
 dnf -y install mariadb-server
 
