@@ -110,7 +110,7 @@ basesoftware(){
 # isntall base software and tools
 # ================================================================
 log "${Blue}安裝常用軟體與工具程式${Reset}"
-dnf install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins screen telnet git gcc iptables-services ftp socat curl rkhunter golang traceroute device-mapper-persistent-data lvm2 python36 python36-devel python3-virtualenv augeas-libs
+dnf install -y htop net-tools wget unzip vim-enhanced p7zip p7zip-plugins screen telnet git gcc iptables-services ftp socat curl rkhunter golang traceroute device-mapper-persistent-data lvm2 python38 python38-devel python3-virtualenv augeas-libs
  
 log "${Blue} chronyc Package 安裝中 ........... ${Reset}"
 if [ -f /usr/sbin/chronyd ]; then
@@ -282,6 +282,7 @@ iptables -A INPUT -p TCP -i \$EXTIF --dport  25 --sport 1024:65534 -j ACCEPT # S
 iptables -A INPUT -p UDP -i \$EXTIF --dport  53 --sport 1024:65534 -j ACCEPT # DNS
 iptables -A INPUT -p TCP -i \$EXTIF --dport  53 --sport 1024:65534 -j ACCEPT # DNS
 iptables -A INPUT -p TCP -i \$EXTIF --dport  80 --sport 1024:65534 -j ACCEPT # WWW
+iptables -A INPUT -p TCP -i \$EXTIF --dport  5000 --sport 1024:65534 -j ACCEPT # SYBASE
 iptables -A INPUT -p TCP -i \$EXTIF --dport 110 --sport 1024:65534 -j ACCEPT # POP3
 iptables -A INPUT -p TCP -i \$EXTIF --dport 443 --sport 1:65534 -j ACCEPT # HTTPS
 iptables -A INPUT -p TCP -i \$EXTIF --dport 3128 --sport 1024:65534 -j ACCEPT # PROXY 
@@ -455,26 +456,30 @@ install_MariaDB () {
 # install_MariaDB
 # ================================================================
 log "${Blue}Install MariaDB 資料庫${Reset}"
-cat >> /etc/yum.repos.d/MariaDB.repo <<EOT
-[mariadb]
-name = MariaDB
-baseurl = http://yum.mariadb.org/10.5/centos8-amd64/
-gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
-gpgcheck=1
-EOT
-dnf -y --enablerepo=mariadb install mariadb-server
-#dnf -y install http://yum.mariadb.org/10.4/centos8-amd64/rpms/MariaDB-server-10.4.8-1.el8.x86_64.rpm
+#cat >> /etc/yum.repos.d/MariaDB.repo <<EOT
+#[mariadb]
+#name = MariaDB
+#baseurl = http://yum.mariadb.org/10.5/centos8-amd64/
+#gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
+#gpgcheck=1
+#EOT
+curl -LsS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | sudo bash
+sleep 3
+dnf update
+sleep 2
+dnf -y install mariadb-server
+
 log "${Blue}Set MariaDB character utf8${Reset}"
 
 sed -i '/\[mysql\]/a\default-character-set=utf8' /etc/my.cnf.d/mysql-clients.cnf
-sed -i '/\[mysqld\]/a\character-set-server=utf8' /etc/my.cnf.d/mariadb-server.cnf
-sed -i '/\[mysqld\]/a\innodb_file_per_table = 1' /etc/my.cnf.d/mariadb-server.cnf
-sed -i '/\[mysqld\]/a\net_read_timeout=120' /etc/my.cnf.d/mariadb-server.cnf
-sed -i '/\[mysqld\]/a\event_scheduler = ON' /etc/my.cnf.d/mariadb-server.cnf
-sed -i '/\[mysqld\]/a\innodb_buffer_pool_size = 2G' /etc/my.cnf.d/mariadb-server.cnf
-sed -i '/\[mysqld\]/a\innodb_log_buffer_size =512M' /etc/my.cnf.d/mariadb-server.cnf
-sed -i '/\[mysqld\]/a\skip-name-resolve' /etc/my.cnf.d/mariadb-server.cnf
-sed -i '/\[mysqld\]/a\max_connections=100' /etc/my.cnf.d/mariadb-server.cnf
+sed -i '/\[mysqld\]/a\character-set-server=utf8' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\innodb_file_per_table = 1' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\net_read_timeout=120' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\event_scheduler = ON' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\innodb_buffer_pool_size = 2G' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\innodb_log_buffer_size =512M' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\skip-name-resolve' /etc/my.cnf.d/server.cnf
+sed -i '/\[mysqld\]/a\max_connections=100' /etc/my.cnf.d/server.cnf
 
 log "${Blue}Install mydumper${Reset}"
 dnf install -y https://github.com/maxbube/mydumper/releases/download/v0.9.5/mydumper-0.9.5-2.el7.x86_64.rpm
@@ -728,8 +733,8 @@ install_php
 install_vsftpd
 # 安裝proxy
 install_squid
-# 安裝 Let'SSL 免費憑證
-install_letSSL
+# 準備刪除安裝 Let'SSL 免費憑證
+# install_letSSL
 #custom_settings
 final
 # ================================================================
